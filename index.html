@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0f0f13">
+<title>RP Companion — Лира</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overscroll-behavior:none}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:#0f0f13;color:#e0e0e0;display:flex;flex-direction:column;touch-action:manipulation}
+.header{background:#1a1a24;padding:12px 16px;display:flex;align-items:center;gap:12px;border-bottom:1px solid #2d2d3d;flex-shrink:0;padding-top:env(safe-area-inset-top)}
+.avatar{width:44px;height:44px;background:linear-gradient(135deg,#7c4dff,#00e5ff);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;color:#fff;flex-shrink:0}
+.info{flex:1;min-width:0}
+.info h1{font-size:17px;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.info p{font-size:11px;color:#00e5ff}
+.status{font-size:10px;color:#6a6a7a}
+.chat-container{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px;padding-bottom:env(safe-area-inset-bottom)}
+.message{max-width:85%;padding:9px 13px;border-radius:18px;line-height:1.4;font-size:15px;word-wrap:break-word}
+.message.user{align-self:flex-end;background:#7c4dff;color:#fff;border-bottom-right-radius:4px}
+.message.ai{align-self:flex-start;background:#1a1a24;border:1px solid #2d2d3d;border-bottom-left-radius:4px}
+.message-meta{font-size:9px;color:#888;margin-bottom:3px;display:block}
+.message.user .message-meta{color:rgba(255,255,255,0.7)}
+.input-container{padding:10px 12px;background:#1a1a24;border-top:1px solid #2d2d3d;flex-shrink:0;padding-bottom:calc(10px + env(safe-area-inset-bottom))}
+.input-wrapper{display:flex;gap:8px;background:#0f0f13;border:1px solid #2d2d3d;border-radius:24px;padding:6px 10px;align-items:flex-end}
+.input-field{flex:1;background:transparent;border:none;color:#e0e0e0;font-size:15px;resize:none;font-family:inherit;outline:none;padding:8px 0;max-height:100px;line-height:1.4}
+.send-btn{background:#7c4dff;border:none;border-radius:50%;width:38px;height:38px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;flex-shrink:0;color:#fff}
+.send-btn:active{opacity:0.8}
+.send-btn:disabled{opacity:0.4}
+.typing{display:none;align-self:flex-start;background:#1a1a24;padding:9px 13px;border-radius:18px;border-bottom-left-radius:4px;gap:4px;border:1px solid #2d2d3d}
+.typing.active{display:flex}
+.typing-dot{width:7px;height:7px;background:#888;border-radius:50%;animation:typingAnim 1.4s infinite}
+.typing-dot:nth-child(2){animation-delay:0.2s}.typing-dot:nth-child(3){animation-delay:0.4s}
+@keyframes typingAnim{0%,60%,100%{transform:translateY(0);opacity:0.5}30%{transform:translateY(-5px);opacity:1}}
+.welcome{text-align:center;padding:30px 16px;color:#888}
+.welcome h3{color:#fff;margin-bottom:6px;font-size:18px}
+.welcome p{font-size:14px}
+.footer{text-align:center;padding:6px;font-size:9px;color:#555;background:#0f0f13}
+#error-banner{background:#ff408122;border:1px solid #ff4081;color:#ff8a9e;padding:6px 10px;font-size:11px;text-align:center;display:none}
+@media(max-width:480px){.message{max-width:90%;font-size:14px}.input-field{font-size:16px}}
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="avatar">Л</div>
+  <div class="info">
+    <h1>Лира</h1>
+    <p>Мастер ролевых игр</p>
+    <div class="status" id="status">🟢 В сети</div>
+  </div>
+</div>
+<div id="error-banner">⚠️ Требуется интернет для первой загрузки модели</div>
+<div class="chat-container" id="chatContainer">
+  <div class="welcome" id="welcome">
+    <h3>✨ Добро пожаловать</h3>
+    <p>Я Лира, твой собеседник. Спрашивай о чём угодно!</p>
+  </div>
+  <div class="typing" id="typing">
+    <div class="typing-dot"></div>
+    <div class="typing-dot"></div>
+    <div class="typing-dot"></div>
+  </div>
+</div>
+<div class="input-container">
+  <div class="input-wrapper">
+    <textarea class="input-field" id="userInput" placeholder="Напиши сообщение..." rows="1" inputmode="text"></textarea>
+    <button class="send-btn" id="sendBtn">➤</button>
+  </div>
+</div>
+<div class="footer">RP Companion • Работает на Android</div>
+
+<!-- UMD-сборка: без export, работает везде -->
+<script src="https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2/dist/transformers.min.js" defer crossorigin="anonymous"></script>
+<script defer>
+(function(){
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const DOM = {
+    chat: $('chatContainer'), input: $('userInput'), send: $('sendBtn'),
+    typing: $('typing'), welcome: $('welcome'), status: $('status'), err: $('error-banner')
+  };
+  if (!DOM.chat || !DOM.input) { console.error('[App] Элементы не найдены'); return; }
+
+  let generator = null, ready = false, generating = false, history = [];
+  const SYS = 'Ты — Лира, дружелюбный помощник. Отвечай кратко, с теплотой, на русском. Иногда используй смайлики.';
+
+  const esc = t => { const d=document.createElement('div'); d.textContent=t; return d.innerHTML; };
+  
+  const addMsg = (role, text) => {
+    if (DOM.welcome) DOM.welcome.style.display = 'none';
+    const m = document.createElement('div');
+    m.className = `message ${role}`;
+    const tm = new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
+    m.innerHTML = `<span class="message-meta">${role==='user'?'Вы':'Лира'} • ${tm}</span>${esc(text)}`;
+    DOM.typing.parentNode ? DOM.typing.parentNode.insertBefore(m, DOM.typing) : DOM.chat.appendChild(m);
+    DOM.chat.scrollTop = DOM.chat.scrollHeight;
+  };
+  
+  const showTyping = s => { DOM.typing.classList.toggle('active', s); if(s) DOM.chat.scrollTop = DOM.chat.scrollHeight; };
+  
+  const resize = () => { 
+    DOM.input.style.height='auto'; 
+    DOM.input.style.height=Math.min(DOM.input.scrollHeight,100)+'px'; 
+  };
+
+  // Загрузка ONNX-модели (работает в браузере и на Android)
+  async function loadModel() {
+    if (ready) return true;
+    DOM.status.textContent = '🟡 Загрузка...';
+    try {
+      // Ждём transformers.js
+      let retries = 0;
+      while (typeof transformers === 'undefined' && retries < 50) {
+        await new Promise(r=>setTimeout(r,100)); retries++;
+      }
+      if (typeof transformers === 'undefined') throw new Error('transformers.js не загрузился');
+      
+      // ⚠️ Только ONNX! GGUF не работает в браузере
+      generator = await transformers.pipeline('text-generation', 'Xenova/tiny-stories-15M', {
+        dtype: 'q4',
+        progress_callback: p => { 
+          if (p < 1) DOM.status.textContent = `🟡 ${Math.round(p*100)}%`; 
+        }
+      });
+      ready = true;
+      DOM.status.textContent = '🟢 Готов';
+      return true;
+    } catch(e) {
+      console.warn('[Core] Модель не загружена, используем фоллбэк:', e.message);
+      DOM.status.textContent = '🟡 Фоллбэк-режим';
+      return false;
+    }
+  }
+
+  async function respond(input) {
+    if (!ready) { await loadModel(); if(!ready) return fallback(input); }
+    try {
+      let prompt = `${SYS}\n`;
+      history.slice(-3).forEach(m => { 
+        prompt += `${m.r==='u'?'User':'Assistant'}: ${m.t}\n`; 
+      });
+      prompt += `User: ${input}\nAssistant:`;
+      
+      const res = await generator(prompt, { 
+        max_new_tokens: 50, 
+        temperature: 0.8, 
+        do_sample: true, 
+        top_p: 0.9 
+      });
+      
+      let reply = res[0]?.generated_text?.split('Assistant:')?.pop()?.trim();
+      return reply || fallback(input);
+    } catch { return fallback(input); }
+  }
+
+  const fallback = t => {
+    const s = t.toLowerCase();
+    if (s.includes('привет') || s.includes('здравствуй')) return 'Привет! Как настроение? 😊';
+    if (s.includes('как дела')) return 'Отлично! А у тебя?';
+    if (s.includes('кто ты')) return 'Я Лира, твой ИИ-помощник.';
+    if (s.includes('пока') || s.includes('до свидания')) return 'До встречи! 👋';
+    if (s.includes('?')) return 'Хороший вопрос. Давай разберёмся.';
+    return 'Понимаю. Расскажи подробнее?';
+  };
+
+  async function send() {
+    const text = DOM.input.value.trim();
+    if (!text || generating) return;
+    
+    generating = true; 
+    DOM.send.disabled = true;
+    addMsg('user', text); 
+    history.push({r:'u', t:text});
+    
+    DOM.input.value = ''; 
+    resize(); 
+    showTyping(true);
+    
+    try {
+      const reply = await respond(text);
+      showTyping(false); 
+      addMsg('ai', reply); 
+      history.push({r:'a', t:reply});
+    } catch { 
+      showTyping(false); 
+      addMsg('ai', '⚠️ Ошибка. Попробуй ещё раз.'); 
+    } finally { 
+      generating = false; 
+      DOM.send.disabled = false; 
+      DOM.input.focus(); 
+    }
+  }
+
+  // События
+  DOM.send.addEventListener('click', send);
+  DOM.input.addEventListener('input', resize);
+  DOM.input.addEventListener('keydown', e => { 
+    if (e.key==='Enter' && !e.shiftKey) { 
+      e.preventDefault(); 
+      send(); 
+    } 
+  });
+  
+  // Предотвращаем зум на фокусе инпута (Android)
+  DOM.input.addEventListener('focus', function() {
+    if (window.visualViewport) {
+      window.visualViewport.scale = 1.0;
+    }
+  });
+
+  // Запуск
+  loadModel();
+  console.log('[App] Ready');
+})();
+</script>
+</body>
+</html>
