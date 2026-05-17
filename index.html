@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>RP Companion — Лира</title>
+    <title>Лира — Нейросеть</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -169,14 +169,13 @@
 </div>
 
 <div class="footer">
-    RP Companion • Transformers.js • Локальная нейросеть
+    RP Companion • Transformers.js • TinyLlama
 </div>
 
-<!-- Transformers.js как модуль -->
 <script type="importmap">
     {
         "imports": {
-            "@xenova/transformers": "https://cdn.skypack.dev/@xenova/transformers"
+            "@xenova/transformers": "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.5"
         }
     }
 </script>
@@ -184,35 +183,42 @@
 <script type="module">
     import { pipeline, env } from '@xenova/transformers';
     
-    // Сохраняем в window для доступа из других скриптов
-    window.transformers = { pipeline, env };
+    // РЕШЕНИЕ ПРОБЛЕМЫ: отключаем поиск onnxruntime-node
+    // и принудительно используем WebAssembly в браузере
+    if (typeof window !== 'undefined') {
+        // Указываем путь к WASM файлам
+        env.backends.onnx.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.5/dist/';
+        // Отключаем Node.js режим
+        env.backends.onnx.isNode = false;
+        // Разрешаем локальные модели
+        env.allowLocalModels = false;
+        env.allowRemoteModels = true;
+    }
     
     let generator = null;
     let isReady = false;
-    let loadProgress = 0;
     const statusEl = document.getElementById('status');
     
     async function loadModel() {
         if (isReady) return true;
         
-        statusEl.innerHTML = '🟡 Загрузка нейросети... 0%';
+        statusEl.innerHTML = '🟡 Загрузка нейросети TinyLlama...';
         console.log('[Core] Загрузка модели...');
         
         try {
             generator = await pipeline('text-generation', 'Xenova/tiny-llama-1.1b', {
                 progress_callback: (p) => {
-                    loadProgress = p;
                     statusEl.innerHTML = '🟡 Загрузка... ' + Math.round(p * 100) + '%';
                 }
             });
             
             isReady = true;
-            statusEl.innerHTML = '🟢 Готово';
+            statusEl.innerHTML = '🟢 Нейросеть готова';
             console.log('[Core] Модель загружена!');
             return true;
         } catch(e) {
             console.error('[Core] Ошибка:', e);
-            statusEl.innerHTML = '🔴 Ошибка загрузки';
+            statusEl.innerHTML = '🔴 Ошибка загрузки: ' + e.message;
             return false;
         }
     }
@@ -220,7 +226,7 @@
     async function generateResponse(input) {
         if (!isReady) {
             await loadModel();
-            if (!isReady) return 'Нейросеть загружается...';
+            if (!isReady) return 'Нейросеть загружается... Подожди.';
         }
         
         try {
@@ -233,8 +239,8 @@
             response = response.replace(input, '').trim();
             return response || '...';
         } catch(e) {
-            console.error(e);
-            return 'Ошибка генерации';
+            console.error('[Core] Ошибка генерации:', e);
+            return '⚠️ Ошибка. Попробуй ещё раз.';
         }
     }
     
@@ -249,7 +255,9 @@
         context: { getStats: () => ({}) }
     };
     
-    // Запуск интерфейса
+    // ============================================
+    // INTERFACE
+    // ============================================
     function escapeHtml(text) {
         const div = document.createElement('div');
         div.textContent = text;
@@ -290,9 +298,15 @@
         input.value = '';
         
         showTyping(true);
-        const response = await window.Core.respond(text);
-        showTyping(false);
-        addMessage('ai', response.text);
+        try {
+            const response = await window.Core.respond(text);
+            showTyping(false);
+            addMessage('ai', response.text);
+        } catch(e) {
+            showTyping(false);
+            addMessage('ai', '⚠️ Ошибка');
+            console.error(e);
+        }
     }
     
     function initInterface() {
